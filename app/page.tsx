@@ -2378,6 +2378,9 @@ export default function Home() {
         })
         .then((result) => {
           if (cancelled || !result?.state) return;
+          // Never replace a workspace with a background snapshot while edits
+          // or a save are pending. The active POG remains authoritative.
+          if (cloudDirty.current || saveInFlight.current || conflictRef.current) return;
           const hydrated = normalize(result.state);
           if (!hydrated.planograms.length) return;
           rememberWorkspacePlanograms(hydrated);

@@ -49,3 +49,14 @@ test('cloud loading never substitutes a different POG for the selected file', ()
   assert.match(fn, /if \(!loadedPlan\) throw new Error/);
   assert.doesNotMatch(fn, /loadedWorkspace\.planograms\[0\]/);
 });
+
+test('background hydration does not overwrite unsaved or newer workspace data', () => {
+  const page = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+  const start = page.indexOf('  useEffect(() => {\n    if (\n      auth.status !== "signed-in" ||\n      !partialWorkspace ||\n      fullWorkspaceHydrated.current ||');
+  const end = page.indexOf('  // Do not prefetch unrelated cloud POGs', start);
+  assert.ok(start >= 0 && end > start, 'background hydration effect exists');
+  const fn = page.slice(start, end);
+  assert.match(fn, /cloudDirty\.current \|\| saveInFlight\.current \|\| conflictRef\.current/);
+  assert.match(fn, /result\.revision !== cloudRevision\.current/);
+  assert.match(fn, /\n    saved,\n/);
+});

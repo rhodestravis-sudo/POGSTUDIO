@@ -561,9 +561,17 @@ async function writeActivePlanState(
       productCount: item.productCount,
       sectionCount: item.sectionCount ?? 0,
     })),
-    existingSummaries = existingPointer?.planograms?.length
-      ? existingPointer.planograms
-      : scannedSummaries,
+    // The stored workspace is authoritative. A pointer's cached list may contain
+    // POGs that were deleted in a later workspace revision.
+    existingCacheKeys = new Map(
+      (existingPointer?.planograms ?? [])
+        .filter((item) => item.r2Key)
+        .map((item) => [item.id, item.r2Key]),
+    ),
+    existingSummaries = scannedSummaries.map((item) => ({
+      ...item,
+      r2Key: existingCacheKeys.get(item.id),
+    })),
     incomingSummary = {
       id: incomingPlan.id,
       title: incomingPlan.title ?? "Untitled POG",
@@ -621,11 +629,15 @@ async function repairOwnerWorkspaceIfNeeded(
 ) {
   if (identity.email !== OWNER_EMAIL)
     return { data, revision, repaired: false };
+  // A valid single-POG or empty workspace can be intentional after deletion.
+  // Never auto-restore a legacy snapshot solely because it contains more POGs.
+  const currentStructure = await workspaceStructureOrNull(data);
+  if (currentStructure)
+    return { data, revision, repaired: false };
   const pointer = statePointer(data);
   if ((pointer?.planograms?.length ?? 0) > 1)
     return { data, revision, repaired: false };
 
-  const currentStructure = await workspaceStructureOrNull(data);
   if (currentStructure && currentStructure.plans.length > 1)
     return { data, revision, repaired: false };
 

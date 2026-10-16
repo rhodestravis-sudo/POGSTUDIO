@@ -2836,6 +2836,12 @@ export default function Home() {
     setSelectedPlacement(null);
   };
   const deletePog = () => {
+    // Active-only cloud saves cannot persist deletions of other POGs.
+    // Require the complete workspace so a deletion cannot silently reappear.
+    if (partialWorkspace && !fullWorkspaceHydrated.current) {
+      setSaveMessage("Cloud deletion requires the complete workspace to load. No POG has been deleted.");
+      return;
+    }
     if (pogOptions.length === 1) return;
     const remainingSummaries = pogOptions.filter((p) => p.id !== plan.id),
       remaining = workspace.planograms.filter((p) => p.id !== plan.id);

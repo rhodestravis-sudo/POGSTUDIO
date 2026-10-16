@@ -1268,11 +1268,9 @@ export default function Home() {
       if (result?.revision) cloudRevision.current = result.revision;
       if (!result?.state) return null;
       const loadedWorkspace = normalize(result.state),
-        loadedPlan =
-          loadedWorkspace.planograms.find((item) => item.id === id) ??
-          loadedWorkspace.planograms.find((item) => item.id === loadedWorkspace.activeId) ??
-          loadedWorkspace.planograms[0] ??
-          null;
+        loadedPlan = loadedWorkspace.planograms.find((item) => item.id === id);
+      // Never substitute another POG when the requested cloud file is missing.
+      if (!loadedPlan) throw new Error("Requested POG not found in cloud response. No file was changed.");
       rememberOpenedPlanogram(loadedPlan);
       warmPlanogramImages(loadedPlan);
       return loadedPlan;
@@ -2380,6 +2378,12 @@ export default function Home() {
         })
         .then((result) => {
           if (cancelled || !result?.state) return;
+          // Never replace a workspace with a background snapshot while edits
+          // or a save are pending. The active POG remains authoritative.
+          if (cloudDirty.current || saveInFlight.current || conflictRef.current) return;
+          // The response may have started before a save; do not install a
+          // workspace snapshot older than the currently acknowledged revision.
+          if (result.revision !== cloudRevision.current) return;
           const hydrated = normalize(result.state);
           if (!hydrated.planograms.length) return;
           rememberWorkspacePlanograms(hydrated);
@@ -2398,7 +2402,8 @@ export default function Home() {
             ...hydrated,
             activeId: activeExists ? currentActiveId : hydrated.activeId,
           });
-          hydrated.planograms.slice(0, 8).forEach(warmPlanogramImages);
+          // Do not eagerly warm images for unrelated POGs during hydration.
+          // Individual POGs warm their images when explicitly opened.
         })
         .catch(() => {
           fullWorkspaceHydrated.current = false;
@@ -2416,71 +2421,12 @@ export default function Home() {
     auth.status,
     auth.status === "signed-in" ? auth.user.email : "",
     partialWorkspace,
+    // A completed save can safely trigger another hydration attempt if the
+    // previous response was discarded while edits were in progress.
+    saved,
   ]);
-  useEffect(() => {
-    if (
-      auth.status !== "signed-in" ||
-      !partialWorkspace ||
-      fullWorkspaceHydrated.current ||
-      planogramSummaries.length < 2
-    )
-      return;
-    let cancelled = false,
-      timer: number | null = null;
-    const schedule = (delay: number) => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => void run(), delay);
-    };
-    const run = async () => {
-      if (cancelled) return;
-      if (
-        switchingPogId ||
-        cloudDirty.current ||
-        saveInFlight.current ||
-        conflictRef.current ||
-        copyDrawerOpen
-      ) {
-        schedule(3500);
-        return;
-      }
-      const activeIndex = Math.max(
-          0,
-          planogramSummaries.findIndex((item) => item.id === workspace.activeId),
-        ),
-        candidates = [
-          ...planogramSummaries.slice(activeIndex + 1),
-          ...planogramSummaries.slice(0, activeIndex),
-        ],
-        next = candidates.find(
-          (item) =>
-            item.id !== workspace.activeId &&
-            !openedPlanograms.current.has(item.id) &&
-            !idlePrefetchedPlanograms.current.has(item.id),
-        );
-      if (!next) return;
-      idlePrefetchedPlanograms.current.add(next.id);
-      try {
-        const loadedPlan = await loadPlanogramFromCloud(next.id);
-        if (!loadedPlan) idlePrefetchedPlanograms.current.delete(next.id);
-      } catch {
-        idlePrefetchedPlanograms.current.delete(next.id);
-      }
-      if (!cancelled) schedule(9000);
-    };
-    schedule(3000);
-    return () => {
-      cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [
-    auth.status,
-    auth.status === "signed-in" ? auth.user.email : "",
-    copyDrawerOpen,
-    partialWorkspace,
-    planogramSummaries,
-    switchingPogId,
-    workspace.activeId,
-  ]);
+  // Do not prefetch unrelated cloud POGs in the background. This competes with
+  // active POG loading and can initiate image requests for unopened plans.
   useEffect(() => {
     setImageStatus("idle");
     setImageMessage("");
@@ -2890,14 +2836,23 @@ export default function Home() {
     setSelectedPlacement(null);
   };
   const deletePog = () => {
+    // Active-only cloud saves cannot persist deletions of other POGs.
+    // Require the complete workspace so a deletion cannot silently reappear.
+    if (partialWorkspace && !fullWorkspaceHydrated.current) {
+      setSaveMessage("Cloud deletion requires the complete workspace to load. No POG has been deleted.");
+      return;
+    }
     if (pogOptions.length === 1) return;
     const remainingSummaries = pogOptions.filter((p) => p.id !== plan.id),
       remaining = workspace.planograms.filter((p) => p.id !== plan.id);
     if (!remaining.length) {
-      void switchPog(remainingSummaries[0].id);
-      setPlanogramSummaries(remainingSummaries);
+      // In a partial workspace, switching files does not perform deletion.
+      // Refuse rather than present a misleading result or drop cloud data.
+      setSaveMessage("This POG cannot be deleted while only one cloud POG is loaded. Open the complete workspace before deleting.");
       return;
     }
+    openedPlanograms.current.delete(plan.id);
+    setPlanogramSummaries(remainingSummaries);
     setWorkspace((w) => ({
       ...w,
       activeId: remaining[0].id,

@@ -638,9 +638,6 @@ async function repairOwnerWorkspaceIfNeeded(
   if ((pointer?.planograms?.length ?? 0) > 1)
     return { data, revision, repaired: false };
 
-  if (currentStructure && currentStructure.plans.length > 1)
-    return { data, revision, repaired: false };
-
   const legacy = await legacyWorkspaceData(),
     candidates = [ownerRetainedWorkspaceData, legacy].filter((item): item is string => !!item);
   let bestData: string | null = null,

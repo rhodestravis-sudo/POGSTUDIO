@@ -2418,70 +2418,8 @@ export default function Home() {
     auth.status === "signed-in" ? auth.user.email : "",
     partialWorkspace,
   ]);
-  useEffect(() => {
-    if (
-      auth.status !== "signed-in" ||
-      !partialWorkspace ||
-      fullWorkspaceHydrated.current ||
-      planogramSummaries.length < 2
-    )
-      return;
-    let cancelled = false,
-      timer: number | null = null;
-    const schedule = (delay: number) => {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => void run(), delay);
-    };
-    const run = async () => {
-      if (cancelled) return;
-      if (
-        switchingPogId ||
-        cloudDirty.current ||
-        saveInFlight.current ||
-        conflictRef.current ||
-        copyDrawerOpen
-      ) {
-        schedule(3500);
-        return;
-      }
-      const activeIndex = Math.max(
-          0,
-          planogramSummaries.findIndex((item) => item.id === workspace.activeId),
-        ),
-        candidates = [
-          ...planogramSummaries.slice(activeIndex + 1),
-          ...planogramSummaries.slice(0, activeIndex),
-        ],
-        next = candidates.find(
-          (item) =>
-            item.id !== workspace.activeId &&
-            !openedPlanograms.current.has(item.id) &&
-            !idlePrefetchedPlanograms.current.has(item.id),
-        );
-      if (!next) return;
-      idlePrefetchedPlanograms.current.add(next.id);
-      try {
-        const loadedPlan = await loadPlanogramFromCloud(next.id);
-        if (!loadedPlan) idlePrefetchedPlanograms.current.delete(next.id);
-      } catch {
-        idlePrefetchedPlanograms.current.delete(next.id);
-      }
-      if (!cancelled) schedule(9000);
-    };
-    schedule(3000);
-    return () => {
-      cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [
-    auth.status,
-    auth.status === "signed-in" ? auth.user.email : "",
-    copyDrawerOpen,
-    partialWorkspace,
-    planogramSummaries,
-    switchingPogId,
-    workspace.activeId,
-  ]);
+  // Do not prefetch unrelated cloud POGs in the background. This competes with
+  // active POG loading and can initiate image requests for unopened plans.
   useEffect(() => {
     setImageStatus("idle");
     setImageMessage("");

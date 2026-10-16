@@ -2840,10 +2840,13 @@ export default function Home() {
     const remainingSummaries = pogOptions.filter((p) => p.id !== plan.id),
       remaining = workspace.planograms.filter((p) => p.id !== plan.id);
     if (!remaining.length) {
-      void switchPog(remainingSummaries[0].id);
-      setPlanogramSummaries(remainingSummaries);
+      // In a partial workspace, switching files does not perform deletion.
+      // Refuse rather than present a misleading result or drop cloud data.
+      setSaveMessage("This POG cannot be deleted while only one cloud POG is loaded. Open the complete workspace before deleting.");
       return;
     }
+    openedPlanograms.current.delete(plan.id);
+    setPlanogramSummaries(remainingSummaries);
     setWorkspace((w) => ({
       ...w,
       activeId: remaining[0].id,

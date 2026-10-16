@@ -1268,11 +1268,9 @@ export default function Home() {
       if (result?.revision) cloudRevision.current = result.revision;
       if (!result?.state) return null;
       const loadedWorkspace = normalize(result.state),
-        loadedPlan =
-          loadedWorkspace.planograms.find((item) => item.id === id) ??
-          loadedWorkspace.planograms.find((item) => item.id === loadedWorkspace.activeId) ??
-          loadedWorkspace.planograms[0] ??
-          null;
+        loadedPlan = loadedWorkspace.planograms.find((item) => item.id === id);
+      // Never substitute another POG when the requested cloud file is missing.
+      if (!loadedPlan) throw new Error("Requested POG not found in cloud response. No file was changed.");
       rememberOpenedPlanogram(loadedPlan);
       warmPlanogramImages(loadedPlan);
       return loadedPlan;

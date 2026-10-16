@@ -2381,6 +2381,9 @@ export default function Home() {
           // Never replace a workspace with a background snapshot while edits
           // or a save are pending. The active POG remains authoritative.
           if (cloudDirty.current || saveInFlight.current || conflictRef.current) return;
+          // The response may have started before a save; do not install a
+          // workspace snapshot older than the currently acknowledged revision.
+          if (result.revision !== cloudRevision.current) return;
           const hydrated = normalize(result.state);
           if (!hydrated.planograms.length) return;
           rememberWorkspacePlanograms(hydrated);
@@ -2418,6 +2421,9 @@ export default function Home() {
     auth.status,
     auth.status === "signed-in" ? auth.user.email : "",
     partialWorkspace,
+    // A completed save can safely trigger another hydration attempt if the
+    // previous response was discarded while edits were in progress.
+    saved,
   ]);
   // Do not prefetch unrelated cloud POGs in the background. This competes with
   // active POG loading and can initiate image requests for unopened plans.

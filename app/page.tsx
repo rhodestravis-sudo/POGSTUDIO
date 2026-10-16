@@ -2398,7 +2398,8 @@ export default function Home() {
             ...hydrated,
             activeId: activeExists ? currentActiveId : hydrated.activeId,
           });
-          hydrated.planograms.slice(0, 8).forEach(warmPlanogramImages);
+          // Do not eagerly warm images for unrelated POGs during hydration.
+          // Individual POGs warm their images when explicitly opened.
         })
         .catch(() => {
           fullWorkspaceHydrated.current = false;

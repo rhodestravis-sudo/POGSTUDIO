@@ -26,3 +26,26 @@ test('active POG save uses canonical workspace membership instead of cached poin
   assert.match(fn, /r2Key:\s*existingCacheKeys\.get\(item\.id\)/);
   assert.doesNotMatch(fn, /existingSummaries\s*=\s*existingPointer\?\.planograms/);
 });
+
+test('partial cloud workspaces cannot perform misleading POG deletions', () => {
+  const page = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+  const start = page.indexOf('  const deletePog = () => {');
+  const end = page.indexOf('  const restoreDeletedPog =', start);
+  assert.ok(start >= 0 && end > start, 'POG deletion function exists');
+  const fn = page.slice(start, end);
+  assert.match(fn, /if \(partialWorkspace && !fullWorkspaceHydrated\.current\)/);
+  assert.match(fn, /No POG has been deleted/);
+  assert.match(fn, /openedPlanograms\.current\.delete\(plan\.id\)/);
+  assert.match(fn, /setPlanogramSummaries\(remainingSummaries\)/);
+});
+
+test('cloud loading never substitutes a different POG for the selected file', () => {
+  const page = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+  const start = page.indexOf('  const loadPlanogramFromCloud = async (');
+  const end = page.indexOf('  useEffect(() => {', start);
+  assert.ok(start >= 0 && end > start, 'cloud POG loader exists');
+  const fn = page.slice(start, end);
+  assert.match(fn, /loadedWorkspace\.planograms\.find\(\(item\) => item\.id === id\)/);
+  assert.match(fn, /if \(!loadedPlan\) throw new Error/);
+  assert.doesNotMatch(fn, /loadedWorkspace\.planograms\[0\]/);
+});
